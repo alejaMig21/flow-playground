@@ -64,6 +64,14 @@
   .banner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 4px 0 8px; padding: 9px 14px; border-radius: 10px; font-size: 13px;
             background: color-mix(in srgb, var(--run) 14%, var(--panel)); border: 1px solid color-mix(in srgb, var(--run) 50%, var(--line)); }
   .banner[hidden] { display: none; }
+  .banner.help { align-items: flex-start; }
+  .helpbody { flex: 1; min-width: 260px; }
+  .helpbody summary { cursor: pointer; font-weight: 600; margin-top: 6px; }
+  .helpbody ol { margin: 6px 0 4px; padding-left: 20px; }
+  .helpbody li { margin: 5px 0; }
+  .helpbody code { font: 12px ui-monospace, "Cascadia Code", Consolas, monospace; background: var(--grid); padding: 1px 6px; border-radius: 5px; overflow-wrap: anywhere; }
+  .helpbody button { font-size: 12px; padding: 2px 9px; margin-left: 4px; }
+  .helpbody .why { color: var(--muted); font-size: 12.5px; margin: 4px 0 0; }
 
   /* canvas */
   #scroller { position: relative; overflow: auto; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); box-shadow: var(--shadow); }
@@ -193,8 +201,23 @@
     <span><strong>Imported flow.</strong> Check its HTTP URLs and Transform code before running it.</span>
     <button id="trustBtn">I reviewed it, allow Run</button>
   </div>
-  <div class="banner" id="ollamaHelp" hidden>
-    <span id="ollamaHelpText"></span>
+  <div class="banner help" id="ollamaHelp" hidden>
+    <div class="helpbody">
+      <strong>Ollama was not detected on this computer.</strong>
+      The AI nodes use a model that runs on your own machine through Ollama. Everything else on this page works without it.
+      <details open>
+        <summary>How to enable it (about 2 minutes)</summary>
+        <ol>
+          <li>Install <a href="https://ollama.com/download" target="_blank" rel="noopener">Ollama</a> if you do not have it, and download a model: in a terminal run <code>ollama pull llama3.2</code>.</li>
+          <li>Quit Ollama: right-click its icon next to the clock and choose <em>Quit</em>.</li>
+          <li><strong>Windows:</strong> open the Start menu, type <em>environment variables</em> and open <em>Edit the environment variables for your account</em>. Click <em>New…</em> and fill in:
+            Name <code>OLLAMA_ORIGINS</code> and Value <code class="orig"></code> <button id="copyOrigin" type="button">Copy value</button>. Click OK.<br>
+            <strong>macOS / Linux:</strong> instead, start Ollama from a terminal with <code id="serveCmd"></code></li>
+          <li>Open Ollama again and press <em>Check again</em>.</li>
+        </ol>
+        <p class="why">Why: Ollama only talks to web pages it has been told about, and a web page cannot change that setting. Your prompts and files stay on your computer.</p>
+      </details>
+    </div>
     <button id="ollamaRetry">Check again</button>
   </div>
 
@@ -286,8 +309,8 @@
     $('ollamaHelp').hidden = !show;
     if (!show) return;
     const origin = location.protocol.startsWith('http') ? location.origin : '*';
-    $('ollamaHelpText').textContent = 'Ollama was not detected on this machine, so the AI nodes are not available here. They need Ollama running locally and allowing this page: start it with OLLAMA_ORIGINS=' + origin
-      + ' (a web page cannot change that setting). Everything else works without it.';
+    document.querySelectorAll('#ollamaHelp .orig').forEach((e) => { e.textContent = origin; });
+    $('serveCmd').textContent = 'OLLAMA_ORIGINS=' + origin + ' ollama serve';
   }
   async function ensureOllama() {
     setMsg('Checking for Ollama on this machine...');
@@ -639,6 +662,13 @@
     if (AI_TEMPLATES().includes(v) && !(await ensureOllama())) { e.target.value = lastTemplate; return; }   // stay where we were
     if (!AI_TEMPLATES().includes(v)) showOllamaHelp(false);
     lastTemplate = v; loadTemplate(v); setMsg('');
+  });
+  $('copyOrigin').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(document.querySelector('#ollamaHelp .orig').textContent);
+      $('copyOrigin').textContent = 'Copied';
+      setTimeout(() => { $('copyOrigin').textContent = 'Copy value'; }, 1500);
+    } catch (_) { /* the value is on screen; copying it by hand works too */ }
   });
   $('ollamaRetry').addEventListener('click', async () => {
     if (await ensureOllama()) setMsg('Ollama detected (' + ollama.models.length + ' model(s)). Pick an AI template or add the Ollama node.');

@@ -1,0 +1,635 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="A small workflow-automation engine that runs in your browser: upload a file, call an API, ask a local AI model.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%235b5bd6'/%3E%3Cpath d='M6 6h8a3 3 0 0 1 0 6h-4a3 3 0 0 0 0 6h7M14.5 15.5l2.5 2.5-2.5 2.5' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<title>Flow Playground</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f3f4fb; --glow: #dfe0fb; --panel: #ffffff; --panel2: #f7f8fd; --text: #181d36; --muted: #5a6385; --line: #dcdff0;
+    --edge: #98a1c4; --accent: #5b5bd6; --accent2: #7c3aed; --ink: #ffffff;
+    --ok: #15803d; --err: #dc2626; --run: #b45309; --skip: #7b86a8; --grid: #e4e7f5;
+    --c-in: #0d9488; --c-svc: #2563eb; --c-ai: #7c3aed; --c-tf: #c2680a; --c-out: #15803d;
+    --shadow: 0 1px 2px rgba(24, 29, 54, .06), 0 8px 24px rgba(24, 29, 54, .08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0a0f1e; --glow: #1b2147; --panel: #131a30; --panel2: #0f1527; --text: #e8ebf8; --muted: #9ba5c9; --line: #263052;
+      --edge: #55608a; --accent: #8e8eff; --accent2: #b18cff; --ink: #0a0f1e;
+      --ok: #4ade80; --err: #f87171; --run: #fbbf24; --skip: #7b86a8; --grid: #182041;
+      --c-in: #2dd4bf; --c-svc: #60a5fa; --c-ai: #a78bfa; --c-tf: #fbbf24; --c-out: #4ade80;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 28px rgba(0, 0, 0, .35);
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 20px 16px 28px; color: var(--text); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         background: radial-gradient(900px 420px at 12% -8%, var(--glow), transparent 70%), radial-gradient(700px 360px at 95% 0%, var(--glow), transparent 70%), var(--bg); }
+  main { max-width: 1280px; margin: 0 auto; }
+
+  /* header */
+  .hero { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; margin-bottom: 16px; }
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .mark { width: 46px; height: 46px; border-radius: 13px; display: grid; place-items: center; color: #fff;
+          background: linear-gradient(135deg, var(--accent), var(--accent2)); box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 40%, transparent); }
+  h1 { margin: 0; font-size: 24px; letter-spacing: -.02em; line-height: 1.15; }
+  .tag { margin: 2px 0 0; color: var(--muted); max-width: 62ch; }
+  .pills { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+  .pills li { font-size: 12px; color: var(--muted); padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; background: color-mix(in srgb, var(--panel) 70%, transparent); }
+
+  /* controls */
+  .deck { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 12px 14px; display: grid; gap: 10px; }
+  .row1, .palette { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+  .grow { flex: 1; }
+  button, select { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 9px; padding: 6px 12px; cursor: pointer;
+                   transition: border-color .15s, background .15s, transform .05s; }
+  button:hover:not(:disabled), select:hover { border-color: var(--accent); }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:disabled { opacity: .5; cursor: default; }
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, .port:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .run { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: var(--ink); border-color: transparent; font-weight: 650; padding: 7px 18px; }
+  .run:hover:not(:disabled) { border-color: transparent; filter: brightness(1.08); }
+  .stop { color: var(--err); border-color: color-mix(in srgb, var(--err) 55%, var(--line)); font-weight: 600; }
+  .lbl { color: var(--muted); font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: .07em; }
+  .group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding-right: 12px; margin-right: 2px; border-right: 1px solid var(--line); }
+  .group:last-child { border-right: 0; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px 5px 8px; border-radius: 999px; font-size: 13px; }
+  .chip svg { color: var(--cat); }
+  .chip:hover:not(:disabled) { border-color: var(--cat); background: color-mix(in srgb, var(--cat) 10%, var(--panel2)); }
+  .cat-in { --cat: var(--c-in); } .cat-svc { --cat: var(--c-svc); } .cat-ai { --cat: var(--c-ai); } .cat-tf { --cat: var(--c-tf); } .cat-out { --cat: var(--c-out); }
+  #msg { min-height: 22px; margin: 8px 2px 4px; color: var(--muted); font-size: 13px; }
+  #msg.err { color: var(--err); }
+  .banner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 4px 0 8px; padding: 9px 14px; border-radius: 10px; font-size: 13px;
+            background: color-mix(in srgb, var(--run) 14%, var(--panel)); border: 1px solid color-mix(in srgb, var(--run) 50%, var(--line)); }
+  .banner[hidden] { display: none; }
+
+  /* canvas */
+  #scroller { position: relative; overflow: auto; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); box-shadow: var(--shadow); }
+  #board { position: relative; width: 1240px; height: 480px;
+           background-image: radial-gradient(var(--grid) 1.2px, transparent 1.2px); background-size: 20px 20px; }
+  #empty { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; color: var(--muted); pointer-events: none; }
+  #empty[hidden] { display: none; }
+  svg#edges { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  svg#edges path.edge { fill: none; stroke: var(--edge); stroke-width: 2.2; stroke-linecap: round; transition: stroke .15s; }
+  svg#edges path.hit { fill: none; stroke: transparent; stroke-width: 16; pointer-events: stroke; cursor: pointer; }
+  svg#edges g:hover path.edge { stroke: var(--err); }
+  svg#edges.busy path.edge { stroke: var(--accent); stroke-dasharray: 7 7; animation: flow .7s linear infinite; }
+  @keyframes flow { to { stroke-dashoffset: -14; } }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--run) 25%, transparent); } }
+  @media (prefers-reduced-motion: reduce) { svg#edges.busy path.edge, .node.running { animation: none; } }
+
+  .node { position: absolute; width: 200px; background: var(--panel); border: 1px solid var(--line); border-top: 3px solid var(--cat);
+          border-radius: 12px; box-shadow: var(--shadow); }
+  .node.ok { outline: 2px solid var(--ok); } .node.error { outline: 2px solid var(--err); }
+  .node.running { outline: 2px solid var(--run); animation: pulse 1.4s ease-in-out infinite; }
+  .node.skipped { outline: 2px dashed var(--skip); }
+  .nh { display: flex; align-items: center; gap: 8px; padding: 7px 8px 7px 10px; font-weight: 650; cursor: grab; touch-action: none; user-select: none;
+        border-radius: 9px 9px 0 0; background: color-mix(in srgb, var(--cat) 9%, var(--panel)); }
+  .nh:active { cursor: grabbing; }
+  .nh svg { color: var(--cat); flex: none; }
+  .nh span { flex: 1; font-size: 13px; }
+  .nh button { padding: 0 7px; border: 0; background: none; color: var(--muted); font-size: 18px; line-height: 1.3; border-radius: 6px; }
+  .nh button:hover:not(:disabled) { color: var(--err); background: color-mix(in srgb, var(--err) 12%, transparent); }
+  .nb { padding: 9px 10px 8px; display: grid; gap: 7px; }
+  .nb label { display: grid; gap: 3px; color: var(--muted); font-size: 11.5px; }
+  .nb input, .nb select, .nb textarea { width: 100%; font: 12px/1.35 ui-monospace, "Cascadia Code", Consolas, monospace; color: var(--text);
+        background: var(--panel2); border: 1px solid var(--line); border-radius: 7px; padding: 4px 7px; }
+  .nb input[type=file] { font-family: inherit; padding: 3px; }
+  .nb input:invalid, .nb textarea:invalid, .nb textarea.bad { border-color: var(--err); background: color-mix(in srgb, var(--err) 7%, var(--panel2)); }
+  .nb textarea { resize: vertical; min-height: 56px; } .nb textarea.big { min-height: 100px; }
+  .nb .note { color: var(--muted); font-size: 11.5px; overflow-wrap: anywhere; }
+  .nb .note.bad { color: var(--err); }
+  .nb button { font-size: 12px; padding: 4px 8px; }
+  .nstat { margin: 0 10px 10px; padding: 2px 9px; border-radius: 9px; font-size: 11.5px; background: var(--grid); color: var(--muted); overflow-wrap: anywhere; }
+  .nstat:empty { display: none; }
+  .node.ok .nstat { color: var(--ok); background: color-mix(in srgb, var(--ok) 13%, transparent); }
+  .node.error .nstat { color: var(--err); background: color-mix(in srgb, var(--err) 12%, transparent); }
+  .node.running .nstat { color: var(--run); background: color-mix(in srgb, var(--run) 14%, transparent); }
+  .port { position: absolute; top: 50%; width: 16px; height: 16px; margin-top: -8px; border-radius: 50%; cursor: pointer;
+          background: var(--panel); border: 2.5px solid var(--cat); transition: transform .12s, background .12s; }
+  .port:hover { transform: scale(1.25); background: color-mix(in srgb, var(--cat) 30%, var(--panel)); }
+  .port.in { left: -9px; } .port.out { right: -9px; }
+  .port.pending { background: var(--cat); transform: scale(1.25); }
+
+  /* result panels */
+  .cols { display: grid; grid-template-columns: 1fr 1.4fr; gap: 14px; margin-top: 14px; }
+  @media (max-width: 800px) { .cols { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 10px 14px 12px; min-width: 0; }
+  .panel h2 { font-size: 12px; margin: 0 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+  .panel h2 .grow { flex: 1; }
+  .panel h2 button { font-size: 12px; padding: 3px 10px; text-transform: none; letter-spacing: 0; font-weight: 500; }
+  #log { font: 12.5px/1.6 ui-monospace, "Cascadia Code", Consolas, monospace; color: var(--muted); max-height: 420px; overflow: auto; overflow-wrap: anywhere; }
+  .ll::before { display: inline-block; width: 1.4em; font-weight: 700; }
+  .ll.o::before { content: "\2713"; color: var(--ok); } .ll.e::before { content: "\2717"; color: var(--err); } .ll.s::before { content: "\2013"; color: var(--skip); }
+  .ll.e { color: var(--err); }
+  /* the output box: everything is scoped here, generic names like .out or .row once collided with the node ports */
+  .outbox { min-height: 40px; max-height: 420px; overflow: auto; }
+  .outbox.plain { white-space: pre-wrap; overflow-wrap: anywhere; font: 12.5px/1.5 ui-monospace, "Cascadia Code", Consolas, monospace; color: var(--muted); }
+  .outbox .card { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; margin-bottom: 8px; background: var(--panel2); }
+  .outbox .cardh { font-size: 11px; color: var(--accent); font-weight: 650; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+  .outbox .row { display: grid; grid-template-columns: 110px 1fr; gap: 10px; padding: 5px 0; border-top: 1px solid var(--line); }
+  .outbox .row:first-of-type { border-top: 0; }
+  .outbox .key { color: var(--muted); font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+  .outbox .val { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto; line-height: 1.55; }
+  .outbox .val code { font: 12px ui-monospace, Consolas, monospace; background: var(--grid); padding: 0 4px; border-radius: 4px; }
+  .hint { color: var(--muted); font-size: 12.5px; margin: 8px 2px 0; }
+  footer { margin-top: 18px; text-align: center; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <header class="hero">
+    <div class="brand">
+      <div class="mark" aria-hidden="true">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h10a4 4 0 0 1 0 7.5H9.5a4 4 0 0 0 0 7.5H19M16.5 16.5L19.5 19l-3 2.5"/></svg>
+      </div>
+      <div>
+        <h1>Flow Playground</h1>
+        <p class="tag">Build and run a small automation right here: upload a file, call an API, ask a local AI model.</p>
+      </div>
+    </div>
+    <ul class="pills" aria-label="Highlights"><li>No backend</li><li>Files stay on this page</li><li>Local AI with Ollama (optional)</li></ul>
+  </header>
+
+  <section class="deck" aria-label="Controls">
+    <div class="row1" role="toolbar" aria-label="Flow controls">
+      <button class="run" id="run">&#9654; Run</button>
+      <button class="stop" id="stop" hidden>&#9632; Stop</button>
+      <label class="lbl" for="tpl">Template</label>
+      <select id="tpl">
+        <option value="orders">Order intake (offline)</option>
+        <option value="api">Public API &rarr; filter &rarr; output</option>
+        <option value="ai">Local AI sentiment (needs Ollama)</option>
+        <option value="cv">CV screening with AI (upload a .docx, needs Ollama)</option>
+        <option value="blank">Blank canvas</option>
+      </select>
+      <span class="grow"></span>
+      <button id="export" title="Download this flow as a JSON file (uploaded file contents are not included)">Export flow</button>
+      <button id="import" title="Load a flow exported from this page">Import flow</button>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
+    </div>
+    <div class="palette" role="toolbar" aria-label="Add nodes">
+      <div class="group cat-in"><span class="lbl">Sources</span>
+        <button class="chip" data-add="source" title="A list of items you type in">Sample data</button>
+        <button class="chip" data-add="table" title="CSV or JSON">Upload table</button>
+        <button class="chip" data-add="document" title="Word (.docx), .txt or .md">Upload document</button></div>
+      <div class="group"><span class="lbl">Services</span>
+        <button class="chip cat-svc" data-add="http">HTTP request</button>
+        <button class="chip cat-ai" data-add="ollama">Ollama (local AI)</button></div>
+      <div class="group"><span class="lbl">Transform</span>
+        <button class="chip cat-tf" data-add="code" title="A JavaScript expression per item">Transform (JS)</button>
+        <button class="chip cat-tf" data-add="filter">Filter</button>
+        <button class="chip cat-tf" data-add="set">Set field</button>
+        <button class="chip cat-tf" data-add="validate">Validate</button>
+        <button class="chip cat-tf" data-add="delay">Delay</button></div>
+      <div class="group"><span class="lbl">Result</span>
+        <button class="chip cat-out" data-add="output">Output</button></div>
+    </div>
+  </section>
+  <p id="msg" aria-live="polite"></p>
+  <div class="banner" id="trust" hidden>
+    <span><strong>Imported flow.</strong> Check its HTTP URLs and Transform code before running it.</span>
+    <button id="trustBtn">I reviewed it, allow Run</button>
+  </div>
+
+  <div id="scroller"><div id="board"><svg id="edges" aria-hidden="true"></svg><div id="empty" hidden><strong>Empty canvas</strong><span>Pick a template or add a node from the palette.</span></div></div></div>
+  <p class="hint">Drag a node by its title. Click a connection to delete it. A node that fails turns red and everything after it is skipped. HTTP calls need an API that allows browser requests (CORS); Ollama is optional and must run on this machine.</p>
+
+  <div class="cols">
+    <section class="panel"><h2>Run log</h2><div id="log" aria-live="polite">Not run yet.</div></section>
+    <section class="panel">
+      <h2>Output <span class="grow"></span><button id="view" title="Switch between a readable view and raw JSON">View: Readable</button><button id="dlJson" disabled>Download JSON</button><button id="dlCsv" disabled>Download CSV</button></h2>
+      <div id="out" class="outbox plain">Not run yet.</div>
+    </section>
+  </div>
+  <footer>Everything runs locally in your browser. The engine is plain JavaScript with its own test suite.</footer>
+</main>
+
+<script src="engine.js"></script>
+<script>
+(function () {
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  const $ = (id) => document.getElementById(id);
+  const board = $('board'), edgesSvg = $('edges'), logEl = $('log'), outEl = $('out'), runBtn = $('run'), stopBtn = $('stop'), msgEl = $('msg');
+  const { LIMITS } = FlowEngine;
+  const DEFAULTS = Object.fromEntries(FlowEngine.NODE_TYPES.map((t) => [t, () => FlowEngine.defaults(t)]));
+
+  const LABELS = { source: 'Sample data', table: 'Upload table', document: 'Upload document', http: 'HTTP request', ollama: 'Ollama (local AI)', code: 'Transform (JS)',
+                   filter: 'Filter', set: 'Set field', validate: 'Validate', delay: 'Delay', output: 'Output' };
+  const CATEGORY = { source: 'in', table: 'in', document: 'in', http: 'svc', ollama: 'ai', code: 'tf', filter: 'tf', set: 'tf', validate: 'tf', delay: 'tf', output: 'out' };
+  // Small stroke icons (24x24), static trusted strings.
+  const ICONS = {
+    source: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/>',
+    table: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16"/>',
+    document: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>',
+    http: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+    ollama: '<path d="M12 3l1.8 4.7 4.7 1.8-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>',
+    code: '<path d="M8 8l-5 4 5 4M16 8l5 4-5 4M14 5l-4 14"/>',
+    filter: '<path d="M3 5h18l-7 8v6l-4-2v-4z"/>',
+    set: '<path d="M4 20h4l11-11-4-4L4 16zM13 7l4 4"/>',
+    validate: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5L16 9.5"/>',
+    delay: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    output: '<path d="M12 4v10M8 10l4 4 4-4M5 19h14"/>',
+  };
+  function icon(type, size = 16) {
+    const s = document.createElementNS(SVGNS, 'svg');
+    for (const [k, v] of Object.entries({ width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' })) s.setAttribute(k, v);
+    s.innerHTML = ICONS[type];
+    return s;
+  }
+
+  // Generic fields: [key, label, kind, select options, input attributes]. Source and the upload nodes are built by hand below.
+  // required / pattern / min / max make the browser itself flag bad input (red border); the engine checks it all again on Run.
+  const HOST_RE = 'https?:\\/\\/(localhost|127\\.0\\.0\\.1|\\[::1\\])(:[0-9]{1,5})?\\/?';
+  const FIELDS = {
+    http: [['method', 'Method', 'select', ['GET', 'POST']],
+           ['url', 'URL (use {{field}})', 'text', undefined, { required: true, pattern: 'https?:\\/\\/\\S+', maxLength: 2000 }],
+           ['body', 'JSON body for POST (use {{field}})', 'area', undefined, { maxLength: 5000 }]],
+    ollama: [['host', 'Ollama host (this machine)', 'text', undefined, { required: true, pattern: HOST_RE, maxLength: 60 }],
+             ['model', 'Model', 'text', undefined, { required: true, pattern: '[A-Za-z0-9][\\w.\\-:\\/]{0,99}', maxLength: 100 }],
+             ['prompt', 'Prompt (use {{field}})', 'area', undefined, { required: true, maxLength: 20000 }],
+             ['field', 'Save answer in field', 'text', undefined, { pattern: '\\S+', maxLength: 60 }]],
+    code: [['code', 'JS expression. "item" = current item. Return an object, a value, or null to drop it.', 'area big', undefined, { required: true, maxLength: 2000 }]],
+    filter: [['field', 'Field', 'text', undefined, { required: true, maxLength: 60 }],
+             ['op', 'Operator', 'select', ['>', '<', '>=', '<=', '==', '!=', 'contains']],
+             ['value', 'Value', 'text', undefined, { maxLength: 200 }]],
+    set: [['field', 'Field', 'text', undefined, { required: true, maxLength: 60 }], ['value', 'Value (use {{field}})', 'text', undefined, { maxLength: 500 }]],
+    validate: [['field', 'Required field', 'text', undefined, { required: true, maxLength: 60 }]],
+    delay: [['ms', 'Milliseconds (0 to ' + LIMITS.delayMs + ')', 'number', undefined, { required: true, min: 0, max: LIMITS.delayMs }]],
+  };
+  const TEMPLATES = {
+    orders: [['source'], ['filter'], ['set'], ['validate'], ['output']],
+    api: [['http'], ['filter', { field: 'completed', op: '==', value: 'false' }], ['set', { field: 'label', value: '#{{id}} {{title}}' }], ['output']],
+    ai: [['source', { items: [{ text: 'Fast delivery, great product' }, { text: 'Arrived broken and support never replied' }] }],
+         ['ollama', { prompt: 'Classify the sentiment of this review as positive or negative. Answer with one word: {{text}}', field: 'sentiment' }], ['output']],
+    cv: [['document'],
+         ['ollama', { field: 'answer', prompt: 'Below is a CV. Would you recommend interviewing this candidate for the role: Python backend developer? Answer "Yes" or "No" first, then give three short reasons based only on the CV.\n\nCV:\n{{text}}' }],
+         ['code', { code: '{ file: item.name, answer: item.answer }' }], ['output']],
+    blank: [],
+  };
+
+  let state, seq, pending, status, untrusted = false, lastOutputs = [];
+
+  function setMsg(t, err) { msgEl.textContent = t || ''; msgEl.className = err ? 'err' : ''; }
+  function setTrust(v) { untrusted = v; $('trust').hidden = !v; }
+
+  function loadTemplate(name) {
+    seq = 0; pending = null; status = {}; setTrust(false);
+    const nodes = TEMPLATES[name].map(([type, over], i) => ({ id: 'n' + ++seq, type, x: 24 + i * 230, y: 24, params: { ...DEFAULTS[type](), ...over } }));
+    state = { nodes, edges: nodes.slice(1).map((n, i) => ({ from: nodes[i].id, to: n.id })) };
+    renderNodes();
+    resetOutput();
+  }
+  function resetOutput() { logEl.textContent = 'Not run yet.'; showOut('Not run yet.'); lastOutputs = []; $('dlJson').disabled = $('dlCsv').disabled = true; }
+
+  // ---- Run log: one line per node, with a symbol and colour for its result ----
+  function showLog(lines) {
+    logEl.replaceChildren(...lines.map((l) => {
+      const d = document.createElement('div');
+      d.className = 'll ' + (/: ERROR/.test(l) ? 'e' : /: skipped/.test(l) ? 's' : 'o');
+      d.textContent = l;
+      return d;
+    }));
+  }
+
+  // ---- Output panel: readable cards (default) or raw JSON ----
+  let view = 'readable';
+  function showOut(msg) { outEl.className = 'outbox plain'; outEl.textContent = msg; }
+  // **bold** and `code` become real elements (no innerHTML, so model output can never inject markup)
+  function inline(s) {
+    return s.split(/(\*\*[^*]+\*\*|`[^`]+`)/).filter(Boolean).map((part) => {
+      if (part.startsWith('**')) { const b = document.createElement('strong'); b.textContent = part.slice(2, -2); return b; }
+      if (part.startsWith('`')) { const c = document.createElement('code'); c.textContent = part.slice(1, -1); return c; }
+      return part;
+    });
+  }
+  function renderOut() {
+    if (!lastOutputs.length) return showOut('No items reached the Output node.');
+    if (view === 'json') return showOut(JSON.stringify(lastOutputs, null, 2));
+    outEl.className = 'outbox';
+    outEl.replaceChildren(...lastOutputs.map((item, i) => makeCard(item, lastOutputs.length > 1 ? 'Item ' + (i + 1) + ' of ' + lastOutputs.length : '')));
+  }
+  function makeCard(item, heading) {
+    const card = document.createElement('div'); card.className = 'card';
+    if (heading) { const h = document.createElement('div'); h.className = 'cardh'; h.textContent = heading; card.append(h); }
+    Object.entries(item).forEach(([k, v]) => {
+      const row = document.createElement('div'); row.className = 'row';
+      const key = document.createElement('div'); key.className = 'key'; key.textContent = k;
+      const val = document.createElement('div'); val.className = 'val';
+      val.append(...inline(typeof v === 'string' ? v : JSON.stringify(v)));
+      row.append(key, val); card.append(row);
+    });
+    return card;
+  }
+  // The answer of a streaming node, shown while it is still being written (and kept if the run is stopped).
+  function showLive(text, stopped) {
+    outEl.className = 'outbox';
+    outEl.replaceChildren(makeCard({ [stopped ? 'stopped answer' : 'answer so far']: text }));
+    const val = outEl.querySelector('.val'); val.scrollTop = val.scrollHeight;
+  }
+
+  function field(label, input) { const l = document.createElement('label'); l.append(label, input); return l; }
+
+  function genericField(node, [key, label, kind, opts, attrs = {}]) {
+    let i;
+    if (kind === 'select') {
+      i = document.createElement('select');
+      opts.forEach((o) => i.add(new Option(o, o)));
+      i.value = node.params[key];
+      i.addEventListener('change', () => { node.params[key] = i.value; });
+    } else {
+      const area = kind.startsWith('area');
+      i = document.createElement(area ? 'textarea' : 'input');
+      if (area) { i.spellcheck = false; if (kind.includes('big')) i.className = 'big'; } else i.type = kind;
+      i.value = node.params[key] ?? '';
+      if (key === 'model') i.setAttribute('list', 'models-' + node.id);
+      i.required = !!attrs.required;
+      if (attrs.pattern) i.setAttribute('pattern', attrs.pattern);
+      if (attrs.min !== undefined) { i.min = attrs.min; i.max = attrs.max; i.step = 1; }
+      i.maxLength = attrs.maxLength || (area ? 5000 : 300);
+      i.addEventListener('input', () => { node.params[key] = i.value; });
+    }
+    return field(label, i);
+  }
+
+  function noteEl(text) { const n = document.createElement('div'); n.className = 'note'; n.textContent = text; return n; }
+
+  function buildBody(node, body) {
+    const p = node.params;
+    if (node.type === 'source') {
+      const t = document.createElement('textarea'); t.className = 'big'; t.spellcheck = false; t.maxLength = 200000; t.value = JSON.stringify(p.items, null, 1);
+      const note = noteEl('');
+      const isList = (v) => Array.isArray(v) && v.every((x) => x && typeof x === 'object' && !Array.isArray(x));
+      t.addEventListener('input', () => {
+        try {
+          const v = JSON.parse(t.value);
+          p.items = v;   // the engine refuses anything that is not a list of objects, with a clear message
+          const ok = isList(v);
+          t.classList.toggle('bad', !ok); note.className = 'note' + (ok ? '' : ' bad');
+          note.textContent = ok ? '' : 'Must be a list of objects, e.g. [{"name": "Ana"}]';
+        } catch (_) { p.items = null; t.classList.add('bad'); note.className = 'note bad'; note.textContent = 'Not valid JSON yet'; }
+      });
+      body.append(field('Items (JSON list of objects)', t), note);
+    } else if (node.type === 'table' || node.type === 'document') {
+      const types = FlowEngine.FILE_KINDS[node.type];
+      const hint = node.type === 'table'
+        ? 'CSV (with a header row) or a JSON list, up to 5 MB. Each row becomes one item.'
+        : 'Word (.docx), .txt or .md, up to 5 MB. The document becomes one item with "name" and "text".';
+      const note = noteEl(p.fileName ? p.fileName + ': ' + p.items.length + ' item(s)' : hint + ' Read in your browser, never uploaded.');
+      const inp = document.createElement('input'); inp.type = 'file'; inp.accept = types.join(','); inp.setAttribute('aria-label', 'Choose a ' + node.type + ' file (' + types.join(', ') + ')');
+      inp.addEventListener('change', async () => {
+        const f = inp.files[0]; if (!f) return;
+        try {
+          p.items = await FlowEngine.readFile(node.type, f); p.fileName = f.name;
+          note.textContent = f.name + ': ' + p.items.length + ' item(s)'; note.classList.remove('bad');
+        } catch (e) { p.items = []; p.fileName = ''; inp.value = ''; note.textContent = e.message; note.classList.add('bad'); }
+      });
+      body.append(inp, note);
+    } else {
+      FIELDS[node.type]?.forEach((f) => body.append(genericField(node, f)));
+      if (node.type === 'output') body.append(noteEl('Collects the final items.'));
+    }
+    if (node.type === 'ollama') {
+      const dl = document.createElement('datalist'); dl.id = 'models-' + node.id;
+      const note = noteEl('Optional: needs Ollama running on this machine.');
+      const btn = document.createElement('button'); btn.textContent = 'Detect models';
+      btn.addEventListener('click', async () => {
+        try {
+          const host = FlowEngine.checkOllamaHost(p.host);
+          const names = (await (await fetch(host + '/api/tags')).json()).models.map((m) => m.name);
+          dl.replaceChildren(...names.map((n) => new Option(n, n)));
+          note.textContent = names.length ? names.length + ' model(s): ' + names.join(', ') : 'Ollama is running but has no models. Run: ollama pull llama3.2';
+          note.classList.remove('bad');
+        } catch (e) {
+          note.textContent = /local/.test(e.message) ? e.message : 'Cannot reach Ollama. Run it with OLLAMA_ORIGINS set to this page’s origin.';
+          note.classList.add('bad');
+        }
+      });
+      body.append(dl, btn, note);
+    }
+  }
+
+  function buildNode(node) {
+    const box = document.createElement('div');
+    box.className = 'node cat-' + CATEGORY[node.type] + ' ' + (status[node.id] || '');
+    box.dataset.id = node.id;
+    box.style.left = node.x + 'px'; box.style.top = node.y + 'px';
+
+    const head = document.createElement('div'); head.className = 'nh';
+    const title = document.createElement('span'); title.textContent = LABELS[node.type];
+    const del = document.createElement('button'); del.textContent = '×'; del.title = 'Delete node'; del.setAttribute('aria-label', 'Delete ' + LABELS[node.type] + ' node');
+    del.addEventListener('pointerdown', (e) => e.stopPropagation());
+    del.addEventListener('click', () => {
+      state.nodes = state.nodes.filter((n) => n !== node);
+      state.edges = state.edges.filter((e) => e.from !== node.id && e.to !== node.id);
+      delete status[node.id]; renderNodes();
+    });
+    head.append(icon(node.type), title, del);
+
+    const body = document.createElement('div'); body.className = 'nb';
+    buildBody(node, body);
+
+    const stat = document.createElement('div'); stat.className = 'nstat'; stat.id = 'stat-' + node.id;
+    box.append(head, body, stat);
+    if (!['source', 'table', 'document'].includes(node.type)) box.append(port(node, 'in'));
+    if (node.type !== 'output') box.append(port(node, 'out'));
+
+    head.addEventListener('pointerdown', (e) => {
+      head.setPointerCapture(e.pointerId);
+      const sx = e.clientX - node.x, sy = e.clientY - node.y;
+      const move = (ev) => {
+        node.x = Math.max(0, ev.clientX - sx); node.y = Math.max(0, ev.clientY - sy);
+        box.style.left = node.x + 'px'; box.style.top = node.y + 'px'; drawEdges();
+      };
+      const up = () => { head.removeEventListener('pointermove', move); head.removeEventListener('pointerup', up); };
+      head.addEventListener('pointermove', move); head.addEventListener('pointerup', up);
+    });
+    return box;
+  }
+
+  function port(node, dir) {
+    const b = document.createElement('div');
+    b.className = 'port ' + dir; b.tabIndex = 0; b.setAttribute('role', 'button');
+    b.setAttribute('aria-label', (dir === 'out' ? 'Output of ' : 'Input of ') + LABELS[node.type]);
+    b.dataset.port = node.id + ':' + dir;
+    const act = (ev) => {
+      ev.stopPropagation();
+      if (dir === 'out') { pending = pending === node.id ? null : node.id; }
+      else if (pending && pending !== node.id && !state.edges.some((e) => e.from === pending && e.to === node.id)) {
+        state.edges.push({ from: pending, to: node.id }); pending = null;
+      }
+      drawEdges();
+    };
+    b.addEventListener('click', act);
+    b.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); act(ev); } });
+    return b;
+  }
+
+  function renderNodes() {
+    board.querySelectorAll('.node').forEach((n) => n.remove());
+    state.nodes.forEach((n) => board.append(buildNode(n)));
+    $('empty').hidden = state.nodes.length > 0;
+    drawEdges();
+  }
+
+  function center(id, dir) {
+    const p = board.querySelector('[data-port="' + id + ':' + dir + '"]');
+    if (!p) return null;
+    const r = p.getBoundingClientRect(), b = board.getBoundingClientRect();
+    return [r.left - b.left + r.width / 2, r.top - b.top + r.height / 2];
+  }
+
+  function drawEdges() {
+    edgesSvg.replaceChildren();
+    board.querySelectorAll('.port.pending').forEach((p) => p.classList.remove('pending'));
+    if (pending) board.querySelector('[data-port="' + pending + ':out"]')?.classList.add('pending');
+    state.edges.forEach((e) => {
+      const a = center(e.from, 'out'), b = center(e.to, 'in');
+      if (!a || !b) return;
+      const k = Math.max(24, Math.abs(b[0] - a[0]) / 2);
+      const d = 'M' + a[0] + ',' + a[1] + ' C' + (a[0] + k) + ',' + a[1] + ' ' + (b[0] - k) + ',' + b[1] + ' ' + b[0] + ',' + b[1];
+      const g = document.createElementNS(SVGNS, 'g');
+      const vis = document.createElementNS(SVGNS, 'path'); vis.setAttribute('d', d); vis.setAttribute('class', 'edge');
+      const hit = document.createElementNS(SVGNS, 'path'); hit.setAttribute('d', d); hit.setAttribute('class', 'hit');
+      const tip = document.createElementNS(SVGNS, 'title'); tip.textContent = 'Click to delete connection';
+      hit.addEventListener('click', () => { state.edges = state.edges.filter((x) => x !== e); drawEdges(); });
+      g.append(vis, hit, tip); edgesSvg.append(g);
+    });
+  }
+
+  function setStatus(id, s, text) {
+    status[id] = s;
+    const box = board.querySelector('.node[data-id="' + id + '"]');
+    if (box) box.className = 'node cat-' + CATEGORY[state.nodes.find((n) => n.id === id).type] + ' ' + s;
+    const st = $('stat-' + id);
+    if (st && text !== undefined) st.textContent = text;
+  }
+
+  // The Transform node runs the user's JavaScript in a Web Worker: it cannot touch the page, it is killed after
+  // 3 seconds (an infinite loop cannot freeze the tab) and when the run is stopped. Network APIs are removed
+  // inside the worker as an extra layer; that is best effort, not a security boundary, which is why imported
+  // flows must be reviewed and trusted before they can run.
+  function runCodeInWorker(code, items, signal) {
+    return new Promise((resolve, reject) => {
+      const src = 'self.onmessage = (e) => {'
+        + ' for (const k of ["fetch","XMLHttpRequest","WebSocket","EventSource","importScripts","Worker","SharedWorker","BroadcastChannel"]) { try { self[k] = undefined; } catch (_) {} }'
+        + ' try { const fn = new Function("item", "return (" + e.data.code + ")"); postMessage({ ok: true, out: e.data.items.map((it) => fn(it)) }); }'
+        + ' catch (err) { postMessage({ ok: false, error: String((err && err.message) || err) }); } };';
+      const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+      const w = new Worker(url);
+      let timer;
+      const onAbort = () => done(reject, new Error('Stopped by user'));
+      const done = (fn, v) => { clearTimeout(timer); signal?.removeEventListener('abort', onAbort); w.terminate(); URL.revokeObjectURL(url); fn(v); };
+      timer = setTimeout(() => done(reject, new Error('Code took longer than 3 seconds and was stopped')), 3000);
+      signal?.addEventListener('abort', onAbort, { once: true });
+      w.onmessage = (e) => (e.data.ok ? done(resolve, e.data.out) : done(reject, new Error(e.data.error)));
+      w.onerror = (e) => done(reject, new Error(e.message || 'Code error'));
+      w.postMessage({ code, items });
+    });
+  }
+
+  async function run() {
+    if (untrusted) { setMsg('This flow was imported. Review it and press "I reviewed it, allow Run" first.', true); return; }
+    runBtn.disabled = true; setMsg('');
+    state.nodes.forEach((n) => setStatus(n.id, '', ''));
+    logEl.textContent = 'Running...'; showOut('Running...'); $('dlJson').disabled = $('dlCsv').disabled = true;
+    edgesSvg.classList.add('busy');
+    const timers = {};
+    const ctl = new AbortController();
+    let live = '';
+    stopBtn.hidden = false; stopBtn.disabled = false;
+    stopBtn.onclick = () => { ctl.abort(); stopBtn.disabled = true; };
+    try {
+      const flow = { nodes: state.nodes.map(({ id, type, params }) => ({ id, type, params })), edges: state.edges };
+      // a model can take a while: show a live timer on the node that is running
+      const onNode = (id, s) => {
+        clearInterval(timers[id]);
+        if (s !== 'running') return setStatus(id, s, s === 'ok' ? 'done' : s === 'error' ? 'failed' : 'skipped');
+        const t0 = Date.now();
+        setStatus(id, s, 'running... 0s');
+        timers[id] = setInterval(() => { const st = $('stat-' + id); if (st) st.textContent = 'running... ' + Math.round((Date.now() - t0) / 1000) + 's'; }, 1000);
+      };
+      const { results, log } = await FlowEngine.runFlow(flow, {
+        onNode, signal: ctl.signal, runCode: runCodeInWorker,
+        onProgress: (_id, text) => { live = text; showLive(text); },
+      });
+      state.nodes.forEach((n) => {
+        const r = results[n.id];
+        setStatus(n.id, r.status, r.status === 'ok' ? r.items.length + ' item(s)' : r.status === 'error' ? r.error : 'skipped');
+      });
+      showLog(log);
+      const outs = state.nodes.filter((n) => n.type === 'output' && results[n.id].status === 'ok');
+      lastOutputs = outs.flatMap((n) => results[n.id].items);
+      if (outs.length) renderOut();
+      else if (live && ctl.signal.aborted) showLive(live, true);
+      else showOut(ctl.signal.aborted ? 'Stopped.' : 'No Output node finished successfully.');
+      $('dlJson').disabled = $('dlCsv').disabled = !lastOutputs.length;
+    } catch (err) {
+      logEl.textContent = 'Cannot run: ' + err.message;
+      showOut('Nothing to show.');
+    }
+    Object.values(timers).forEach(clearInterval);
+    edgesSvg.classList.remove('busy');
+    stopBtn.hidden = true;
+    runBtn.disabled = false;
+  }
+
+  function download(name, text, type) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  // Imported flows are validated by the engine (known types and parameters, valid connections) and must be
+  // reviewed by the person before they can run: a flow file can contain HTTP URLs and JavaScript.
+  function loadFlow(data) {
+    state = FlowEngine.sanitizeFlow(data);
+    seq = Math.max(0, ...state.nodes.map((n) => parseInt(n.id.replace(/\D/g, ''), 10) || 0));
+    pending = null; status = {}; setTrust(true); renderNodes(); resetOutput();
+  }
+
+  document.querySelectorAll('[data-add]').forEach((b) => {
+    b.prepend(icon(b.dataset.add, 15));
+    b.addEventListener('click', () => {
+      if (state.nodes.length >= LIMITS.nodes) { setMsg('A flow can have at most ' + LIMITS.nodes + ' nodes.', true); return; }
+      setMsg('');
+      const type = b.dataset.add, n = state.nodes.length;
+      state.nodes.push({ id: 'n' + ++seq, type, x: 24 + (n % 6) * 30, y: 290 + (n % 4) * 30, params: DEFAULTS[type]() });
+      renderNodes();
+    });
+  });
+  $('tpl').addEventListener('change', (e) => { loadTemplate(e.target.value); setMsg(''); });
+  runBtn.addEventListener('click', run);
+  $('trustBtn').addEventListener('click', () => { setTrust(false); setMsg('Flow allowed. Press Run when you are ready.'); });
+  $('view').addEventListener('click', () => {
+    view = view === 'readable' ? 'json' : 'readable';
+    $('view').textContent = 'View: ' + (view === 'readable' ? 'Readable' : 'JSON');
+    if (lastOutputs.length) renderOut();
+  });
+  $('dlJson').addEventListener('click', () => download('flow-output.json', JSON.stringify(lastOutputs, null, 2), 'application/json'));
+  $('dlCsv').addEventListener('click', () => download('flow-output.csv', FlowEngine.toCsv(lastOutputs), 'text/csv'));
+  $('export').addEventListener('click', () => {
+    // the contents of uploaded files are not exported: a shared flow must not carry someone's documents
+    const nodes = state.nodes.map((n) => (n.type === 'table' || n.type === 'document' ? { ...n, params: { ...n.params, items: [], fileName: '' } } : n));
+    download('flow.json', JSON.stringify({ nodes, edges: state.edges }, null, 2), 'application/json');
+    setMsg('Exported. Uploaded file contents are not included; upload them again after importing.');
+  });
+  $('import').addEventListener('click', () => $('importFile').click());
+  $('importFile').addEventListener('change', async (e) => {
+    const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    try {
+      if (!/\.json$/i.test(f.name)) throw new Error('Choose a .json file exported from this page');
+      if (f.size > 1024 * 1024) throw new Error('The file is too large for a flow (limit 1 MB)');
+      loadFlow(JSON.parse(await f.text()));
+      setMsg('Imported ' + f.name + '.');
+    } catch (err) { setMsg('Import failed: ' + err.message, true); }
+  });
+  board.addEventListener('click', () => { pending = null; drawEdges(); });
+  window.addEventListener('resize', drawEdges);
+  loadTemplate('orders');
+})();
+</script>
+</body>
+</html>

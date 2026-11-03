@@ -109,6 +109,9 @@
     }
   }
 
+  // Which set of instructions to show first (the person can switch); linux is the safe default.
+  const platformOf = (s) => (/mac|darwin/i.test(String(s ?? '')) ? 'mac' : /win/i.test(String(s ?? '')) ? 'windows' : 'linux');
+
   const asItems = (data) => (Array.isArray(data) ? data : [data]).map((x) => (isObj(x) ? x : { value: x }));
 
   // Reads Ollama's newline-delimited JSON stream, reporting the growing answer through ctx.progress.
@@ -479,7 +482,7 @@
   }
 
   const api = {
-    runFlow, sanitizeFlow, parseFile, docxText, readFile, toCsv, checkOllamaHost, detectOllama,
+    runFlow, sanitizeFlow, parseFile, docxText, readFile, toCsv, checkOllamaHost, detectOllama, platformOf,
     FILE_KINDS, LIMITS, NODE_TYPES: Object.keys(DEFAULTS), defaults: (type) => DEFAULTS[type](),
   };
   if (typeof module !== 'undefined') module.exports = api;

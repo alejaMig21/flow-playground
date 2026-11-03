@@ -72,6 +72,12 @@
   .helpbody code { font: 12px ui-monospace, "Cascadia Code", Consolas, monospace; background: var(--grid); padding: 1px 6px; border-radius: 5px; overflow-wrap: anywhere; }
   .helpbody button { font-size: 12px; padding: 2px 9px; margin-left: 4px; }
   .helpbody .why { color: var(--muted); font-size: 12.5px; margin: 4px 0 0; }
+  .helpbody .tabs { display: flex; gap: 6px; margin: 8px 0 4px; }
+  .helpbody .tabs button { margin: 0; padding: 3px 12px; font-size: 13px; }
+  .helpbody .tabs button[aria-selected="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--panel2)); font-weight: 600; }
+  .helpbody .os[hidden] { display: none; }
+  .helpbody .os ol { margin: 4px 0; padding-left: 22px; }
+  .helpbody pre { margin: 6px 0; padding: 6px 10px; background: var(--grid); border-radius: 8px; font: 12px/1.5 ui-monospace, "Cascadia Code", Consolas, monospace; overflow: auto; }
 
   /* canvas */
   #scroller { position: relative; overflow: auto; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); box-shadow: var(--shadow); }
@@ -209,11 +215,37 @@
         <summary>How to enable it (about 2 minutes)</summary>
         <ol>
           <li>Install <a href="https://ollama.com/download" target="_blank" rel="noopener">Ollama</a> if you do not have it, and download a model: in a terminal run <code>ollama pull llama3.2</code>.</li>
-          <li>Quit Ollama: right-click its icon next to the clock and choose <em>Quit</em>.</li>
-          <li><strong>Windows:</strong> open the Start menu, type <em>environment variables</em> and open <em>Edit the environment variables for your account</em>. Click <em>New…</em> and fill in:
-            Name <code>OLLAMA_ORIGINS</code> and Value <code class="orig"></code> <button id="copyOrigin" type="button">Copy value</button>. Click OK.<br>
-            <strong>macOS / Linux:</strong> instead, start Ollama from a terminal with <code id="serveCmd"></code></li>
-          <li>Open Ollama again and press <em>Check again</em>.</li>
+          <li>Tell Ollama to accept this page by setting a variable named <code>OLLAMA_ORIGINS</code> to <code class="orig"></code>. Pick your system:
+            <div class="tabs" role="tablist" aria-label="Operating system">
+              <button type="button" role="tab" data-os="windows">Windows</button>
+              <button type="button" role="tab" data-os="mac">macOS</button>
+              <button type="button" role="tab" data-os="linux">Linux</button>
+            </div>
+            <div class="os" data-os="windows">
+              <ol type="a">
+                <li>Quit Ollama: right-click its icon next to the clock and choose <em>Quit</em>.</li>
+                <li>Open the Start menu, type <em>environment variables</em> and open <em>Edit the environment variables for your account</em>.</li>
+                <li>Click <em>New…</em>, and fill in Name <code>OLLAMA_ORIGINS</code> and Value <code class="orig" id="origWin"></code> <button type="button" data-copy="origWin">Copy value</button>. Click OK.</li>
+                <li>Start Ollama again from the Start menu.</li>
+              </ol>
+            </div>
+            <div class="os" data-os="mac">
+              <ol type="a">
+                <li>Open Terminal and run: <code id="macCmd"></code> <button type="button" data-copy="macCmd">Copy</button></li>
+                <li>Quit Ollama: click its icon in the menu bar (top right) and choose <em>Quit Ollama</em>.</li>
+                <li>Open Ollama again from Applications.</li>
+              </ol>
+            </div>
+            <div class="os" data-os="linux">
+              <ol type="a">
+                <li>Run <code>sudo systemctl edit ollama.service</code>. In the editor that opens, type these two lines at the top and save: <button type="button" data-copy="linuxUnit">Copy</button>
+                  <pre id="linuxUnit"></pre></li>
+                <li>Then restart the service: <code id="linuxRestart">sudo systemctl daemon-reload &amp;&amp; sudo systemctl restart ollama</code> <button type="button" data-copy="linuxRestart">Copy</button></li>
+                <li>No systemd? Stop Ollama and start it yourself with <code id="serveCmd"></code></li>
+              </ol>
+            </div>
+          </li>
+          <li>Press <em>Check again</em>.</li>
         </ol>
         <p class="why">Why: Ollama only talks to web pages it has been told about, and a web page cannot change that setting. Your prompts and files stay on your computer.</p>
       </details>
@@ -310,7 +342,15 @@
     if (!show) return;
     const origin = location.protocol.startsWith('http') ? location.origin : '*';
     document.querySelectorAll('#ollamaHelp .orig').forEach((e) => { e.textContent = origin; });
+    $('macCmd').textContent = 'launchctl setenv OLLAMA_ORIGINS "' + origin + '"';
+    $('linuxUnit').textContent = '[Service]\nEnvironment="OLLAMA_ORIGINS=' + origin + '"';
     $('serveCmd').textContent = 'OLLAMA_ORIGINS=' + origin + ' ollama serve';
+    showOs(FlowEngine.platformOf(navigator.userAgentData?.platform || navigator.platform || navigator.userAgent));
+  }
+  // The steps differ per system, so only the person's own system is shown (the tabs let them switch).
+  function showOs(os) {
+    document.querySelectorAll('#ollamaHelp .tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.os === os)));
+    document.querySelectorAll('#ollamaHelp .os').forEach((d) => { d.hidden = d.dataset.os !== os; });
   }
   async function ensureOllama() {
     setMsg('Checking for Ollama on this machine...');
@@ -663,13 +703,15 @@
     if (!AI_TEMPLATES().includes(v)) showOllamaHelp(false);
     lastTemplate = v; loadTemplate(v); setMsg('');
   });
-  $('copyOrigin').addEventListener('click', async () => {
+  document.querySelectorAll('#ollamaHelp .tabs button').forEach((b) => b.addEventListener('click', () => showOs(b.dataset.os)));
+  document.querySelectorAll('#ollamaHelp [data-copy]').forEach((b) => b.addEventListener('click', async () => {
+    const label = b.textContent;
     try {
-      await navigator.clipboard.writeText(document.querySelector('#ollamaHelp .orig').textContent);
-      $('copyOrigin').textContent = 'Copied';
-      setTimeout(() => { $('copyOrigin').textContent = 'Copy value'; }, 1500);
-    } catch (_) { /* the value is on screen; copying it by hand works too */ }
-  });
+      await navigator.clipboard.writeText($(b.dataset.copy).textContent);
+      b.textContent = 'Copied';
+      setTimeout(() => { b.textContent = label; }, 1500);
+    } catch (_) { /* the text is on screen; copying it by hand works too */ }
+  }));
   $('ollamaRetry').addEventListener('click', async () => {
     if (await ensureOllama()) setMsg('Ollama detected (' + ollama.models.length + ' model(s)). Pick an AI template or add the Ollama node.');
   });

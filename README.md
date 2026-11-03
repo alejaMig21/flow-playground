@@ -74,7 +74,8 @@ checks everything again on Run, so imported flows and hand-edited data get the s
   it is told about (`OLLAMA_ORIGINS`, a setting of the Ollama program that a web page cannot change). So the
   page checks for it only when someone picks an AI template or adds the Ollama node (never on page load, to
   avoid a "local network access" prompt for no reason). If it is not there, the page says so and stays where
-  it was instead of letting a flow run into an error; when it is there, new Ollama nodes start with the
+  it was instead of letting a flow run into an error, with step-by-step instructions for Windows, macOS
+  and Linux (the person's own system is shown first, the others are one click away); when it is there, new Ollama nodes start with the
   smallest installed local model, so the first run works without editing anything. The default template
   does not need Ollama.
 
@@ -88,7 +89,7 @@ Open `index.html` in a browser, or serve the folder (`python -m http.server`).
 node --test
 ```
 
-78 tests, split by concern: `engine.test.js` (the core: items, filter, templates, validation, cycles),
+79 tests, split by concern: `engine.test.js` (the core: items, filter, templates, validation, cycles),
 `nodes.test.js` (every node, streaming, stopping), `files.test.js` (uploads and the `.docx` reader, a small
 zip parser on the browser's built-in `DecompressionStream`), `hardening.test.js` (every refusal listed
 above) and `detect.test.js` (Ollama detection: models, timeout, never throws). Network calls are injected, so the tests need no internet. Needs Node 18+.

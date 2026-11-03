@@ -2,7 +2,13 @@
 // whether AI nodes can work, instead of letting them run a flow and hit an error.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { detectOllama } = require('./engine.js');
+const { detectOllama, platformOf } = require('./engine.js');
+
+test('platformOf picks the instructions to show: windows, mac or linux (the safe default)', () => {
+  for (const s of ['Win32', 'Windows', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)']) assert.equal(platformOf(s), 'windows', s);
+  for (const s of ['MacIntel', 'macOS', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)']) assert.equal(platformOf(s), 'mac', s);
+  for (const s of ['Linux x86_64', 'X11; CrOS x86_64', 'Android', '', undefined, null]) assert.equal(platformOf(s), 'linux', String(s));
+});
 
 const reply = (body, ok = true) => ({ ok, status: ok ? 200 : 500, json: async () => body });
 const spy = (fn) => { const calls = []; return { calls, fetch: async (u, i) => { calls.push({ u, i }); return fn(u, i); } }; };

@@ -94,6 +94,10 @@ node --test
 zip parser on the browser's built-in `DecompressionStream`), `hardening.test.js` (every refusal listed
 above) and `detect.test.js` (Ollama detection: models, timeout, never throws). Network calls are injected, so the tests need no internet. Needs Node 18+.
 
+## License
+
+[MIT](LICENSE). Use it, change it, learn from it.
+
 ## Limits
 
 Single output per node (no true/false branches), no triggers or scheduling, no saving flows between

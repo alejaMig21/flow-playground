@@ -79,6 +79,12 @@ checks everything again on Run, so imported flows and hand-edited data get the s
   smallest installed local model, so the first run works without editing anything. The default template
   does not need Ollama.
 
+- **Phones and tablets:** below 860 px wide the canvas becomes a single vertical list in flow order, with
+  connections running top to bottom (no dragging needed; tap a dot, then another dot). Run and Stop sit in a
+  bar fixed at the bottom of the screen, controls are bigger on touch screens, and the page itself never
+  scrolls sideways (checked from 280 px up). Ollama cannot run on a phone, so the AI nodes say so there
+  instead of showing install steps.
+
 ## Run
 
 Open `index.html` in a browser, or serve the folder (`python -m http.server`).

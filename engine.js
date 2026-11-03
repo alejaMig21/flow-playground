@@ -110,7 +110,12 @@
   }
 
   // Which set of instructions to show first (the person can switch); linux is the safe default.
-  const platformOf = (s) => (/mac|darwin/i.test(String(s ?? '')) ? 'mac' : /win/i.test(String(s ?? '')) ? 'windows' : 'linux');
+  // Phones and tablets are checked first (an iPhone user agent also says "like Mac OS X") and get no steps at all:
+  // Ollama does not run there.
+  const platformOf = (s) => {
+    const x = String(s ?? '');
+    return /android|iphone|ipad|ipod|mobile/i.test(x) ? 'mobile' : /mac|darwin/i.test(x) ? 'mac' : /win/i.test(x) ? 'windows' : 'linux';
+  };
 
   const asItems = (data) => (Array.isArray(data) ? data : [data]).map((x) => (isObj(x) ? x : { value: x }));
 

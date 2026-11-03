@@ -14,6 +14,7 @@
     --ok: #15803d; --err: #dc2626; --run: #b45309; --skip: #7b86a8; --grid: #e4e7f5;
     --c-in: #0d9488; --c-svc: #2563eb; --c-ai: #7c3aed; --c-tf: #c2680a; --c-out: #15803d;
     --shadow: 0 1px 2px rgba(24, 29, 54, .06), 0 8px 24px rgba(24, 29, 54, .08);
+    --ps: 16px;   /* size of the connection dots (bigger on touch screens) */
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -25,7 +26,7 @@
     }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; padding: 20px 16px 28px; color: var(--text); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  body { margin: 0; padding: 20px 16px 28px; overflow-wrap: break-word;   /* a long URL or file name in a message must never widen the page */ color: var(--text); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
          background: radial-gradient(900px 420px at 12% -8%, var(--glow), transparent 70%), radial-gradient(700px 360px at 95% 0%, var(--glow), transparent 70%), var(--bg); }
   main { max-width: 1280px; margin: 0 auto; }
 
@@ -65,7 +66,7 @@
             background: color-mix(in srgb, var(--run) 14%, var(--panel)); border: 1px solid color-mix(in srgb, var(--run) 50%, var(--line)); }
   .banner[hidden] { display: none; }
   .banner.help { align-items: flex-start; }
-  .helpbody { flex: 1; min-width: 260px; }
+  .helpbody { flex: 1 1 260px; min-width: 0; }
   .helpbody summary { cursor: pointer; font-weight: 600; margin-top: 6px; }
   .helpbody ol { margin: 6px 0 4px; padding-left: 20px; }
   .helpbody li { margin: 5px 0; }
@@ -121,10 +122,10 @@
   .node.ok .nstat { color: var(--ok); background: color-mix(in srgb, var(--ok) 13%, transparent); }
   .node.error .nstat { color: var(--err); background: color-mix(in srgb, var(--err) 12%, transparent); }
   .node.running .nstat { color: var(--run); background: color-mix(in srgb, var(--run) 14%, transparent); }
-  .port { position: absolute; top: 50%; width: 16px; height: 16px; margin-top: -8px; border-radius: 50%; cursor: pointer;
+  .port { position: absolute; top: 50%; width: var(--ps); height: var(--ps); margin-top: calc(var(--ps) / -2); border-radius: 50%; cursor: pointer;
           background: var(--panel); border: 2.5px solid var(--cat); transition: transform .12s, background .12s; }
   .port:hover { transform: scale(1.25); background: color-mix(in srgb, var(--cat) 30%, var(--panel)); }
-  .port.in { left: -9px; } .port.out { right: -9px; }
+  .port.in { left: calc(var(--ps) / -2 - 1px); } .port.out { right: calc(var(--ps) / -2 - 1px); }
   .port.pending { background: var(--cat); transform: scale(1.25); }
 
   /* result panels */
@@ -150,6 +151,42 @@
   .outbox .val code { font: 12px ui-monospace, Consolas, monospace; background: var(--grid); padding: 0 4px; border-radius: 4px; }
   .hint { color: var(--muted); font-size: 12.5px; margin: 8px 2px 0; }
   footer { margin-top: 18px; text-align: center; color: var(--muted); font-size: 12px; }
+
+  /* ---- small screens ----
+     Flex items default to min-width:auto, so a long <select> option used to widen the whole page. Everything may shrink. */
+  .row1 > *, .palette > *, .group > *, .deck, .panel, main { min-width: 0; }
+  #tpl { max-width: 100%; text-overflow: ellipsis; }
+  .mbar { display: none; }
+  /* the vertical layout: nodes are a single column listed in flow order, connections run top to bottom, no dragging */
+  #board.vertical { width: auto; height: auto; display: flex; flex-direction: column; align-items: center; gap: 30px; padding: 22px 14px 26px; }
+  #board.vertical .node { position: relative; left: auto !important; top: auto !important; width: min(100%, 380px); }
+  #board.vertical .nh { cursor: default; }
+  #board.vertical .port.in { left: 50%; top: calc(var(--ps) / -2); margin: 0 0 0 calc(var(--ps) / -2); }
+  #board.vertical .port.out { right: auto; left: 50%; top: auto; bottom: calc(var(--ps) / -2); margin: 0 0 0 calc(var(--ps) / -2); }
+  #board.vertical #empty { position: static; padding: 36px 0; }
+  @media (pointer: coarse) {
+    :root { --ps: 26px; }
+    .nb input, .nb select, .nb textarea { font-size: 16px; }   /* iOS zooms into fields smaller than 16px */
+    button, select { min-height: 40px; }
+    .nh button { min-width: 40px; }
+    .chip { min-height: 38px; }
+  }
+  @media (max-width: 860px) {
+    body { padding: 12px 12px 96px; }   /* room for the fixed Run bar */
+    h1 { font-size: 21px; }
+    .hint-desktop { display: none; }
+    .row1 #run, .row1 #stop, .row1 .grow { display: none; }   /* Run / Stop live in the bottom bar instead */
+    .row1 #tpl { flex: 1 1 100%; width: 100%; }
+    .row1 #export, .row1 #import { flex: 1; }
+    .group { width: 100%; border-right: 0; padding-right: 0; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+    .group:last-child { border-bottom: 0; padding-bottom: 0; }
+    .mbar { display: flex; gap: 8px; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+            padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line);
+            background: color-mix(in srgb, var(--panel) 94%, transparent); box-shadow: 0 -6px 18px rgba(0, 0, 0, .12); }
+    .mbar button { flex: 1; min-height: 46px; font-size: 15px; }
+    .mbar button[hidden] { display: none; }
+    .outbox .row { grid-template-columns: 1fr; gap: 2px; }   /* label above the value on narrow screens */
+  }
 </style>
 </head>
 <body>
@@ -209,9 +246,10 @@
   </div>
   <div class="banner help" id="ollamaHelp" hidden>
     <div class="helpbody">
-      <strong>Ollama was not detected on this computer.</strong>
+      <strong>Ollama was not detected on this device.</strong>
       The AI nodes use a model that runs on your own machine through Ollama. Everything else on this page works without it.
-      <details open>
+      <p id="ollamaMobile" hidden>Ollama runs on a computer, not on a phone or tablet. Open this page on your computer to use the AI nodes.</p>
+      <details open id="ollamaSteps">
         <summary>How to enable it (about 2 minutes)</summary>
         <ol>
           <li>Install <a href="https://ollama.com/download" target="_blank" rel="noopener">Ollama</a> if you do not have it, and download a model: in a terminal run <code>ollama pull llama3.2</code>.</li>
@@ -254,7 +292,7 @@
   </div>
 
   <div id="scroller"><div id="board"><svg id="edges" aria-hidden="true"></svg><div id="empty" hidden><strong>Empty canvas</strong><span>Pick a template or add a node from the palette.</span></div></div></div>
-  <p class="hint">Drag a node by its title. Click a connection to delete it. A node that fails turns red and everything after it is skipped. HTTP calls need an API that allows browser requests (CORS); Ollama is optional and must run on this machine.</p>
+  <p class="hint"><span class="hint-desktop">Drag a node by its title. </span>Click a connection to delete it. A node that fails turns red and everything after it is skipped. HTTP calls need an API that allows browser requests (CORS); Ollama is optional and must run on this machine.</p>
 
   <div class="cols">
     <section class="panel"><h2>Run log</h2><div id="log" aria-live="polite">Not run yet.</div></section>
@@ -265,6 +303,12 @@
   </div>
   <footer>Everything runs locally in your browser. The engine is plain JavaScript with its own test suite.</footer>
 </main>
+
+<!-- Run / Stop for small screens: a fixed bar, so the main action is always in reach however long the flow gets -->
+<div class="mbar" id="mbar">
+  <button class="run" id="runM">&#9654; Run</button>
+  <button class="stop" id="stopM" hidden>&#9632; Stop</button>
+</div>
 
 <script src="engine.js"></script>
 <script>
@@ -345,7 +389,15 @@
     $('macCmd').textContent = 'launchctl setenv OLLAMA_ORIGINS "' + origin + '"';
     $('linuxUnit').textContent = '[Service]\nEnvironment="OLLAMA_ORIGINS=' + origin + '"';
     $('serveCmd').textContent = 'OLLAMA_ORIGINS=' + origin + ' ollama serve';
-    showOs(FlowEngine.platformOf(navigator.userAgentData?.platform || navigator.platform || navigator.userAgent));
+    // Ollama cannot run on a phone or tablet: say so instead of showing steps that cannot work there
+    const mobile = isMobile();
+    $('ollamaSteps').hidden = mobile; $('ollamaMobile').hidden = !mobile; $('ollamaRetry').hidden = mobile;
+    showOs(mobile ? 'windows' : FlowEngine.platformOf(navigator.userAgentData?.platform || navigator.platform || navigator.userAgent));
+  }
+  function isMobile() {
+    return navigator.userAgentData?.mobile === true
+      || FlowEngine.platformOf(navigator.userAgentData?.platform || navigator.platform || navigator.userAgent) === 'mobile'
+      || (navigator.maxTouchPoints > 1 && /mac/i.test(navigator.platform || ''));   // iPadOS reports "MacIntel"
   }
   // The steps differ per system, so only the person's own system is shown (the tabs let them switch).
   function showOs(os) {
@@ -532,6 +584,7 @@
     if (node.type !== 'output') box.append(port(node, 'out'));
 
     head.addEventListener('pointerdown', (e) => {
+      if (board.classList.contains('vertical')) return;   // the vertical layout is automatic: nothing to drag
       head.setPointerCapture(e.pointerId);
       const sx = e.clientX - node.x, sy = e.clientY - node.y;
       const move = (ev) => {
@@ -576,15 +629,36 @@
     return [r.left - b.left + r.width / 2, r.top - b.top + r.height / 2];
   }
 
+  // In the vertical layout the nodes are listed in flow order (sources first), whatever order they were added in.
+  function orderNodes() {
+    const indeg = new Map(state.nodes.map((n) => [n.id, 0]));
+    state.edges.forEach((e) => indeg.set(e.to, (indeg.get(e.to) || 0) + 1));
+    const linked = new Set(state.edges.flatMap((e) => [e.from, e.to]));   // nodes with no connection at all go last
+    const queue = state.nodes.filter((n) => linked.has(n.id) && !indeg.get(n.id)).map((n) => n.id), rank = new Map();
+    while (queue.length) {
+      const id = queue.shift();
+      rank.set(id, rank.size);
+      state.edges.filter((e) => e.from === id).forEach((e) => { indeg.set(e.to, indeg.get(e.to) - 1); if (!indeg.get(e.to)) queue.push(e.to); });
+    }
+    state.nodes.forEach((n, i) => {
+      const box = board.querySelector('.node[data-id="' + n.id + '"]');
+      if (box) box.style.order = rank.has(n.id) ? rank.get(n.id) : 1000 + i;
+    });
+  }
+
   function drawEdges() {
+    if (board.classList.contains('vertical')) orderNodes();
     edgesSvg.replaceChildren();
     board.querySelectorAll('.port.pending').forEach((p) => p.classList.remove('pending'));
     if (pending) board.querySelector('[data-port="' + pending + ':out"]')?.classList.add('pending');
     state.edges.forEach((e) => {
       const a = center(e.from, 'out'), b = center(e.to, 'in');
       if (!a || !b) return;
-      const k = Math.max(24, Math.abs(b[0] - a[0]) / 2);
-      const d = 'M' + a[0] + ',' + a[1] + ' C' + (a[0] + k) + ',' + a[1] + ' ' + (b[0] - k) + ',' + b[1] + ' ' + b[0] + ',' + b[1];
+      const vertical = board.classList.contains('vertical');
+      const k = Math.max(24, (vertical ? Math.abs(b[1] - a[1]) : Math.abs(b[0] - a[0])) / 2);
+      const d = vertical
+        ? 'M' + a[0] + ',' + a[1] + ' C' + a[0] + ',' + (a[1] + k) + ' ' + b[0] + ',' + (b[1] - k) + ' ' + b[0] + ',' + b[1]
+        : 'M' + a[0] + ',' + a[1] + ' C' + (a[0] + k) + ',' + a[1] + ' ' + (b[0] - k) + ',' + b[1] + ' ' + b[0] + ',' + b[1];
       const g = document.createElementNS(SVGNS, 'g');
       const vis = document.createElementNS(SVGNS, 'path'); vis.setAttribute('d', d); vis.setAttribute('class', 'edge');
       const hit = document.createElementNS(SVGNS, 'path'); hit.setAttribute('d', d); hit.setAttribute('class', 'hit');
@@ -634,8 +708,8 @@
     const timers = {};
     const ctl = new AbortController();
     let live = '';
-    stopBtn.hidden = false; stopBtn.disabled = false;
-    stopBtn.onclick = () => { ctl.abort(); stopBtn.disabled = true; };
+    stopBtn.hidden = false; stopBtn.disabled = false; syncBar();
+    stopBtn.onclick = () => { ctl.abort(); stopBtn.disabled = true; syncBar(); };
     try {
       const flow = { nodes: state.nodes.map(({ id, type, params }) => ({ id, type, params })), edges: state.edges };
       // a model can take a while: show a live timer on the node that is running
@@ -669,6 +743,7 @@
     edgesSvg.classList.remove('busy');
     stopBtn.hidden = true;
     runBtn.disabled = false;
+    syncBar();
   }
 
   function download(name, text, type) {
@@ -695,6 +770,8 @@
       const n = state.nodes.length;
       state.nodes.push({ id: 'n' + ++seq, type, x: 24 + (n % 6) * 30, y: 290 + (n % 4) * 30, params: newParams(type) });
       renderNodes();
+      // in the vertical layout the new node may be far below the buttons: bring it into view
+      if (board.classList.contains('vertical')) board.querySelector('.node[data-id="n' + seq + '"]')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
     });
   });
   $('tpl').addEventListener('change', async (e) => {
@@ -741,8 +818,19 @@
     } catch (err) { setMsg('Import failed: ' + err.message, true); }
   });
   board.addEventListener('click', () => { pending = null; drawEdges(); });
-  window.addEventListener('resize', drawEdges);
+  window.addEventListener('resize', () => applyLayout());   // also covers browsers that do not report media-query changes
+
+  // The bottom Run / Stop bar (small screens) mirrors the real buttons
+  function syncBar() { $('runM').disabled = runBtn.disabled; $('stopM').hidden = stopBtn.hidden; $('stopM').disabled = stopBtn.disabled; }
+  $('runM').addEventListener('click', () => runBtn.click());
+  $('stopM').addEventListener('click', () => stopBtn.click());
+  // Narrow screens get the vertical layout; it follows the screen (rotation, resizing the window)
+  const narrow = matchMedia('(max-width: 860px)');
+  function applyLayout() { board.classList.toggle('vertical', narrow.matches); drawEdges(); }
+  narrow.addEventListener('change', applyLayout);
+
   loadTemplate('orders');
+  applyLayout();
 })();
 </script>
 </body>

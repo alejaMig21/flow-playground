@@ -4,10 +4,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { detectOllama, platformOf } = require('./engine.js');
 
-test('platformOf picks the instructions to show: windows, mac or linux (the safe default)', () => {
+test('platformOf picks the instructions to show: windows, mac, linux (the safe default) or mobile (Ollama cannot run there)', () => {
   for (const s of ['Win32', 'Windows', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)']) assert.equal(platformOf(s), 'windows', s);
   for (const s of ['MacIntel', 'macOS', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)']) assert.equal(platformOf(s), 'mac', s);
-  for (const s of ['Linux x86_64', 'X11; CrOS x86_64', 'Android', '', undefined, null]) assert.equal(platformOf(s), 'linux', String(s));
+  for (const s of ['Linux x86_64', 'X11; CrOS x86_64', '', undefined, null]) assert.equal(platformOf(s), 'linux', String(s));
+  // phones and tablets: an iPhone user agent also contains "like Mac OS X", mobile must win
+  for (const s of ['Android', 'iPhone', 'iPad', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148', 'Mozilla/5.0 (Linux; Android 14; Pixel 8) Mobile']) assert.equal(platformOf(s), 'mobile', s);
 });
 
 const reply = (body, ok = true) => ({ ok, status: ok ? 200 : 500, json: async () => body });

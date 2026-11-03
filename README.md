@@ -73,12 +73,16 @@ checks everything again on Run, so imported flows and hand-edited data get the s
 - **Ollama** is optional: it needs Ollama running on the visitor's machine, and Ollama only accepts pages
   it is told about (`OLLAMA_ORIGINS`, a setting of the Ollama program that a web page cannot change). So the
   page checks for it only when someone picks an AI template or adds the Ollama node (never on page load, to
-  avoid a "local network access" prompt for no reason). If it is not there, the page says so and stays where
-  it was instead of letting a flow run into an error, with step-by-step instructions for Windows, macOS
+  avoid a "local network access" prompt for no reason). If it is not there, the template or node is still
+  put on the canvas and step-by-step instructions appear next to it, for Windows, macOS
   and Linux (the person's own system is shown first, the others are one click away); when it is there, new Ollama nodes start with the
   smallest installed local model, so the first run works without editing anything. The default template
   does not need Ollama.
 
+- **Templates and Reset:** choosing a template always puts it on the canvas. **Reset** reloads the chosen one
+  and discards your edits (choosing the same option again fires no browser event, so it needs its own
+  button). While a flow runs, everything that changes the canvas is switched off, so results can never be
+  painted on a different flow, and the run uses a snapshot of the values it started with.
 - **Phones and tablets:** below 860 px wide the canvas becomes a single vertical list in flow order, with
   connections running top to bottom (no dragging needed; tap a dot, then another dot). Run and Stop sit in a
   bar fixed at the bottom of the screen, controls are bigger on touch screens, and the page itself never

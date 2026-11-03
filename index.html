@@ -73,7 +73,7 @@
   .helpbody code { font: 12px ui-monospace, "Cascadia Code", Consolas, monospace; background: var(--grid); padding: 1px 6px; border-radius: 5px; overflow-wrap: anywhere; }
   .helpbody button { font-size: 12px; padding: 2px 9px; margin-left: 4px; }
   .helpbody .why { color: var(--muted); font-size: 12.5px; margin: 4px 0 0; }
-  .helpbody .tabs { display: flex; gap: 6px; margin: 8px 0 4px; }
+  .helpbody .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
   .helpbody .tabs button { margin: 0; padding: 3px 12px; font-size: 13px; }
   .helpbody .tabs button[aria-selected="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--panel2)); font-weight: 600; }
   .helpbody .os[hidden] { display: none; }
@@ -157,6 +157,8 @@
   .row1 > *, .palette > *, .group > *, .deck, .panel, main { min-width: 0; }
   #tpl { max-width: 100%; text-overflow: ellipsis; }
   .mbar { display: none; }
+  .running .nh button { opacity: .35; pointer-events: none; }
+  .running svg#edges path.hit, .running .port { pointer-events: none; }
   /* the vertical layout: nodes are a single column listed in flow order, connections run top to bottom, no dragging */
   #board.vertical { width: auto; height: auto; display: flex; flex-direction: column; align-items: center; gap: 30px; padding: 22px 14px 26px; }
   #board.vertical .node { position: relative; left: auto !important; top: auto !important; width: min(100%, 380px); }
@@ -215,7 +217,9 @@
         <option value="ai">Local AI sentiment (needs Ollama)</option>
         <option value="cv">CV screening with AI (upload a .docx, needs Ollama)</option>
         <option value="blank">Blank canvas</option>
+        <option value="imported" hidden>Imported flow</option>
       </select>
+      <button id="reset" title="Reload the selected template and discard your changes">Reset</button>
       <span class="grow"></span>
       <button id="export" title="Download this flow as a JSON file (uploaded file contents are not included)">Export flow</button>
       <button id="import" title="Load a flow exported from this page">Import flow</button>
@@ -374,12 +378,14 @@
   };
 
   let state, seq, pending, status, untrusted = false, lastOutputs = [];
+  let statText = {};            // the text under each node (item count, error), kept when nodes are redrawn
+  let busy = false;             // a flow is running: nothing that changes the canvas may happen meanwhile
+  let currentTemplate = 'orders';
 
-  // ---- Ollama: checked only when someone asks for an AI template or node (not on page load, so nobody gets a
-  // "local network access" browser prompt just for opening the page). If it is not there, say so up front
-  // instead of letting a flow run into an error.
+  // ---- Ollama: checked only when an AI template or node is put on the canvas (not on page load, so nobody gets a
+  // "local network access" browser prompt just for opening the page). The template or node is ALWAYS put on the
+  // canvas: if Ollama is not there, the instructions appear next to it, they never replace it.
   let ollama = { available: false, models: [], smallest: null };
-  let lastTemplate = 'orders';
   const AI_TEMPLATES = () => Object.keys(TEMPLATES).filter((k) => TEMPLATES[k].some(([t]) => t === 'ollama'));
   function showOllamaHelp(show) {
     $('ollamaHelp').hidden = !show;
@@ -404,12 +410,31 @@
     document.querySelectorAll('#ollamaHelp .tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.os === os)));
     document.querySelectorAll('#ollamaHelp .os').forEach((d) => { d.hidden = d.dataset.os !== os; });
   }
-  async function ensureOllama() {
-    setMsg('Checking for Ollama on this machine...');
-    ollama = await FlowEngine.detectOllama();
-    setMsg('');
-    showOllamaHelp(!ollama.available);
-    return ollama.available;
+  // Looks for Ollama and updates the page. A result that arrives after the person moved on (another template, the
+  // node deleted) is ignored, so a slow check can never put a stale warning on screen.
+  let detectToken = 0;
+  const hasOllamaNode = () => state.nodes.some((n) => n.type === 'ollama');
+  async function checkOllama() {
+    const token = ++detectToken;
+    const result = await FlowEngine.detectOllama();
+    if (token !== detectToken) return result;
+    ollama = result;
+    showOllamaHelp(!result.available && hasOllamaNode());
+    if (result.available) applyInstalledModel();
+    return result;
+  }
+  // Ollama nodes still on the default model get a model that is really installed, so the first run just works.
+  function applyInstalledModel() {
+    if (!ollama.available || busy) return;
+    state.nodes.filter((n) => n.type === 'ollama').forEach((n) => {
+      const list = board.querySelector('#models-' + n.id);   // the suggestions always follow what is installed
+      if (list) list.replaceChildren(...ollama.models.map((m) => new Option(m, m)));
+      if (ollama.smallest && n.params.model === DEFAULTS.ollama().model && !ollama.models.includes(n.params.model)) {
+        n.params.model = ollama.smallest;
+        const input = board.querySelector('.node[data-id="' + n.id + '"] input[list]');
+        if (input) input.value = ollama.smallest;
+      }
+    });
   }
   // New Ollama nodes start with a model that is really installed, so the first run works without editing anything.
   function newParams(type, over) {
@@ -422,7 +447,7 @@
   function setTrust(v) { untrusted = v; $('trust').hidden = !v; }
 
   function loadTemplate(name) {
-    seq = 0; pending = null; status = {}; setTrust(false);
+    seq = 0; pending = null; status = {}; statText = {}; setTrust(false);
     const nodes = TEMPLATES[name].map(([type, over], i) => ({ id: 'n' + ++seq, type, x: 24 + i * 230, y: 24, params: newParams(type, over) }));
     state = { nodes, edges: nodes.slice(1).map((n, i) => ({ from: nodes[i].id, to: n.id })) };
     renderNodes();
@@ -569,6 +594,7 @@
     const del = document.createElement('button'); del.textContent = '×'; del.title = 'Delete node'; del.setAttribute('aria-label', 'Delete ' + LABELS[node.type] + ' node');
     del.addEventListener('pointerdown', (e) => e.stopPropagation());
     del.addEventListener('click', () => {
+      if (busy) return;
       state.nodes = state.nodes.filter((n) => n !== node);
       state.edges = state.edges.filter((e) => e.from !== node.id && e.to !== node.id);
       delete status[node.id]; renderNodes();
@@ -578,7 +604,7 @@
     const body = document.createElement('div'); body.className = 'nb';
     buildBody(node, body);
 
-    const stat = document.createElement('div'); stat.className = 'nstat'; stat.id = 'stat-' + node.id;
+    const stat = document.createElement('div'); stat.className = 'nstat'; stat.id = 'stat-' + node.id; stat.textContent = statText[node.id] || '';
     box.append(head, body, stat);
     if (!['source', 'table', 'document'].includes(node.type)) box.append(port(node, 'in'));
     if (node.type !== 'output') box.append(port(node, 'out'));
@@ -604,6 +630,7 @@
     b.dataset.port = node.id + ':' + dir;
     const act = (ev) => {
       ev.stopPropagation();
+      if (busy) return;
       if (dir === 'out') { pending = pending === node.id ? null : node.id; }
       else if (pending && pending !== node.id && !state.edges.some((e) => e.from === pending && e.to === node.id)) {
         state.edges.push({ from: pending, to: node.id }); pending = null;
@@ -663,15 +690,18 @@
       const vis = document.createElementNS(SVGNS, 'path'); vis.setAttribute('d', d); vis.setAttribute('class', 'edge');
       const hit = document.createElementNS(SVGNS, 'path'); hit.setAttribute('d', d); hit.setAttribute('class', 'hit');
       const tip = document.createElementNS(SVGNS, 'title'); tip.textContent = 'Click to delete connection';
-      hit.addEventListener('click', () => { state.edges = state.edges.filter((x) => x !== e); drawEdges(); });
+      hit.addEventListener('click', () => { if (busy) return; state.edges = state.edges.filter((x) => x !== e); drawEdges(); });
       g.append(vis, hit, tip); edgesSvg.append(g);
     });
   }
 
   function setStatus(id, s, text) {
+    const node = state.nodes.find((n) => n.id === id);
+    if (!node) return;   // the node is gone: never touch another node that happens to reuse the id
     status[id] = s;
+    if (text !== undefined) statText[id] = text;
     const box = board.querySelector('.node[data-id="' + id + '"]');
-    if (box) box.className = 'node cat-' + CATEGORY[state.nodes.find((n) => n.id === id).type] + ' ' + s;
+    if (box) box.className = 'node cat-' + CATEGORY[node.type] + ' ' + s;
     const st = $('stat-' + id);
     if (st && text !== undefined) st.textContent = text;
   }
@@ -700,8 +730,10 @@
   }
 
   async function run() {
+    if (busy) return;
     if (untrusted) { setMsg('This flow was imported. Review it and press "I reviewed it, allow Run" first.', true); return; }
-    runBtn.disabled = true; setMsg('');
+    if (!state.nodes.length) { setMsg('The canvas is empty. Pick a template or add a node first.', true); return; }
+    setBusy(true); setMsg('');
     state.nodes.forEach((n) => setStatus(n.id, '', ''));
     logEl.textContent = 'Running...'; showOut('Running...'); $('dlJson').disabled = $('dlCsv').disabled = true;
     edgesSvg.classList.add('busy');
@@ -711,7 +743,8 @@
     stopBtn.hidden = false; stopBtn.disabled = false; syncBar();
     stopBtn.onclick = () => { ctl.abort(); stopBtn.disabled = true; syncBar(); };
     try {
-      const flow = { nodes: state.nodes.map(({ id, type, params }) => ({ id, type, params })), edges: state.edges };
+      // a snapshot: typing in a node while the flow runs must not change the run that already started
+      const flow = { nodes: state.nodes.map(({ id, type, params }) => ({ id, type, params: structuredClone(params) })), edges: state.edges.map((e) => ({ ...e })) };
       // a model can take a while: show a live timer on the node that is running
       const onNode = (id, s) => {
         clearInterval(timers[id]);
@@ -729,11 +762,15 @@
         setStatus(n.id, r.status, r.status === 'ok' ? r.items.length + ' item(s)' : r.status === 'error' ? r.error : 'skipped');
       });
       showLog(log);
+      // an AI node that could not reach Ollama: put the instructions in front of the person
+      if (Object.values(results).some((r) => r.status === 'error' && /^Cannot reach Ollama/.test(r.error))) showOllamaHelp(true);
       const outs = state.nodes.filter((n) => n.type === 'output' && results[n.id].status === 'ok');
       lastOutputs = outs.flatMap((n) => results[n.id].items);
       if (outs.length) renderOut();
       else if (live && ctl.signal.aborted) showLive(live, true);
-      else showOut(ctl.signal.aborted ? 'Stopped.' : 'No Output node finished successfully.');
+      else showOut(ctl.signal.aborted ? 'Stopped.'
+        : state.nodes.some((n) => n.type === 'output') ? 'No Output node finished successfully.'
+        : 'This flow has no Output node. Add one at the end to see and download the results.');
       $('dlJson').disabled = $('dlCsv').disabled = !lastOutputs.length;
     } catch (err) {
       logEl.textContent = 'Cannot run: ' + err.message;
@@ -742,8 +779,7 @@
     Object.values(timers).forEach(clearInterval);
     edgesSvg.classList.remove('busy');
     stopBtn.hidden = true;
-    runBtn.disabled = false;
-    syncBar();
+    setBusy(false);
   }
 
   function download(name, text, type) {
@@ -757,29 +793,34 @@
   function loadFlow(data) {
     state = FlowEngine.sanitizeFlow(data);
     seq = Math.max(0, ...state.nodes.map((n) => parseInt(n.id.replace(/\D/g, ''), 10) || 0));
-    pending = null; status = {}; setTrust(true); renderNodes(); resetOutput();
+    pending = null; status = {}; statText = {}; setTrust(true); renderNodes(); resetOutput();
+    currentTemplate = 'imported'; $('tpl').value = 'imported'; syncControls();   // the selector must not keep naming another template
+    if (hasOllamaNode()) checkOllama(); else { detectToken++; showOllamaHelp(false); }
   }
 
   document.querySelectorAll('[data-add]').forEach((b) => {
     b.prepend(icon(b.dataset.add, 15));
-    b.addEventListener('click', async () => {
+    b.addEventListener('click', () => {
+      if (busy) return;
       if (state.nodes.length >= LIMITS.nodes) { setMsg('A flow can have at most ' + LIMITS.nodes + ' nodes.', true); return; }
       setMsg('');
-      const type = b.dataset.add;
-      if (type === 'ollama' && !(await ensureOllama())) return;
-      const n = state.nodes.length;
+      const type = b.dataset.add, n = state.nodes.length;
       state.nodes.push({ id: 'n' + ++seq, type, x: 24 + (n % 6) * 30, y: 290 + (n % 4) * 30, params: newParams(type) });
       renderNodes();
       // in the vertical layout the new node may be far below the buttons: bring it into view
       if (board.classList.contains('vertical')) board.querySelector('.node[data-id="n' + seq + '"]')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      if (type === 'ollama') checkOllama();   // the node is already there; the instructions appear beside it if needed
     });
   });
-  $('tpl').addEventListener('change', async (e) => {
-    const v = e.target.value;
-    if (AI_TEMPLATES().includes(v) && !(await ensureOllama())) { e.target.value = lastTemplate; return; }   // stay where we were
-    if (!AI_TEMPLATES().includes(v)) showOllamaHelp(false);
-    lastTemplate = v; loadTemplate(v); setMsg('');
-  });
+  // Choosing a template always puts it on the canvas. Reset reloads the chosen one (choosing the same option again
+  // fires no event, so without Reset there would be no way to get a clean canvas back).
+  function selectTemplate(v) {
+    currentTemplate = v; $('tpl').value = v;
+    loadTemplate(v); setMsg(''); syncControls();
+    if (AI_TEMPLATES().includes(v)) checkOllama(); else { detectToken++; showOllamaHelp(false); }
+  }
+  $('tpl').addEventListener('change', (e) => { if (busy) { e.target.value = currentTemplate; return; } selectTemplate(e.target.value); });
+  $('reset').addEventListener('click', () => { if (!busy && currentTemplate !== 'imported') selectTemplate(currentTemplate); });
   document.querySelectorAll('#ollamaHelp .tabs button').forEach((b) => b.addEventListener('click', () => showOs(b.dataset.os)));
   document.querySelectorAll('#ollamaHelp [data-copy]').forEach((b) => b.addEventListener('click', async () => {
     const label = b.textContent;
@@ -790,7 +831,8 @@
     } catch (_) { /* the text is on screen; copying it by hand works too */ }
   }));
   $('ollamaRetry').addEventListener('click', async () => {
-    if (await ensureOllama()) setMsg('Ollama detected (' + ollama.models.length + ' model(s)). Pick an AI template or add the Ollama node.');
+    const r = await checkOllama();
+    setMsg(r.available ? 'Ollama detected (' + r.models.length + ' model(s)).' : 'Ollama was still not detected.');
   });
   runBtn.addEventListener('click', run);
   $('trustBtn').addEventListener('click', () => { setTrust(false); setMsg('Flow allowed. Press Run when you are ready.'); });
@@ -809,7 +851,7 @@
   });
   $('import').addEventListener('click', () => $('importFile').click());
   $('importFile').addEventListener('change', async (e) => {
-    const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    const f = e.target.files[0]; e.target.value = ''; if (!f || busy) return;
     try {
       if (!/\.json$/i.test(f.name)) throw new Error('Choose a .json file exported from this page');
       if (f.size > 1024 * 1024) throw new Error('The file is too large for a flow (limit 1 MB)');
@@ -819,6 +861,20 @@
   });
   board.addEventListener('click', () => { pending = null; drawEdges(); });
   window.addEventListener('resize', () => applyLayout());   // also covers browsers that do not report media-query changes
+
+  // While a flow runs, anything that changes the canvas is switched off (a run that finishes on top of a different
+  // canvas would paint its results on the wrong nodes).
+  function setBusy(v) {
+    busy = v;
+    document.body.classList.toggle('running', v);
+    runBtn.disabled = v;
+    syncControls(); syncBar();
+  }
+  function syncControls() {
+    $('tpl').disabled = busy; $('import').disabled = busy;
+    $('reset').disabled = busy || currentTemplate === 'imported';   // an imported flow has no template to go back to
+    document.querySelectorAll('[data-add]').forEach((b) => { b.disabled = busy; });
+  }
 
   // The bottom Run / Stop bar (small screens) mirrors the real buttons
   function syncBar() { $('runM').disabled = runBtn.disabled; $('stopM').hidden = stopBtn.hidden; $('stopM').disabled = stopBtn.disabled; }
@@ -831,6 +887,7 @@
 
   loadTemplate('orders');
   applyLayout();
+  syncControls();
 })();
 </script>
 </body>

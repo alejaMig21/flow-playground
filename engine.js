@@ -86,6 +86,29 @@
     return (m[1] + '://' + m[2] + (m[3] || '')).toLowerCase();
   }
 
+  // Asks the local Ollama which models it has, so the page can say up front whether AI nodes can work.
+  // Never throws: any failure (not installed, not running, origin not allowed, timeout) is "not available".
+  // smallest = the smallest model that really runs locally, a quick default for a first run.
+  async function detectOllama(fetchFn = (...a) => globalThis.fetch(...a), host = DEFAULTS.ollama().host, timeoutMs = 2500) {
+    const none = { available: false, models: [], smallest: null };
+    let base;
+    try { base = checkOllamaHost(host); } catch (_) { return none; }
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), timeoutMs);
+    try {
+      const r = await fetchFn(base + '/api/tags', { signal: ctl.signal });
+      if (!r.ok) return none;
+      const models = (await r.json()).models || [];
+      // cloud models are a few bytes on disk (not zero) and need an Ollama account, so they are never suggested
+      const local = models.filter((m) => m.size >= 50e6 && !/cloud$/i.test(m.name)).sort((a, b) => a.size - b.size);
+      return { available: true, models: models.map((m) => m.name), smallest: local[0]?.name ?? null };
+    } catch (_) {
+      return none;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   const asItems = (data) => (Array.isArray(data) ? data : [data]).map((x) => (isObj(x) ? x : { value: x }));
 
   // Reads Ollama's newline-delimited JSON stream, reporting the growing answer through ctx.progress.
@@ -456,7 +479,7 @@
   }
 
   const api = {
-    runFlow, sanitizeFlow, parseFile, docxText, readFile, toCsv, checkOllamaHost,
+    runFlow, sanitizeFlow, parseFile, docxText, readFile, toCsv, checkOllamaHost, detectOllama,
     FILE_KINDS, LIMITS, NODE_TYPES: Object.keys(DEFAULTS), defaults: (type) => DEFAULTS[type](),
   };
   if (typeof module !== 'undefined') module.exports = api;

@@ -70,9 +70,13 @@ checks everything again on Run, so imported flows and hand-edited data get the s
 ## Things to know
 
 - **HTTP** only works with APIs that allow browser requests (CORS). Failures say so.
-- **Ollama** is optional: it needs Ollama running on the visitor's machine. If the page's origin is not
-  allowed, start Ollama with `OLLAMA_ORIGINS` set to it. The node reports a clear error if it cannot
-  connect, and the default template does not need it.
+- **Ollama** is optional: it needs Ollama running on the visitor's machine, and Ollama only accepts pages
+  it is told about (`OLLAMA_ORIGINS`, a setting of the Ollama program that a web page cannot change). So the
+  page checks for it only when someone picks an AI template or adds the Ollama node (never on page load, to
+  avoid a "local network access" prompt for no reason). If it is not there, the page says so and stays where
+  it was instead of letting a flow run into an error; when it is there, new Ollama nodes start with the
+  smallest installed local model, so the first run works without editing anything. The default template
+  does not need Ollama.
 
 ## Run
 
@@ -84,10 +88,10 @@ Open `index.html` in a browser, or serve the folder (`python -m http.server`).
 node --test
 ```
 
-73 tests, split by concern: `engine.test.js` (the core: items, filter, templates, validation, cycles),
+78 tests, split by concern: `engine.test.js` (the core: items, filter, templates, validation, cycles),
 `nodes.test.js` (every node, streaming, stopping), `files.test.js` (uploads and the `.docx` reader, a small
-zip parser on the browser's built-in `DecompressionStream`) and `hardening.test.js` (every refusal listed
-above). Network calls are injected, so the tests need no internet. Needs Node 18+.
+zip parser on the browser's built-in `DecompressionStream`), `hardening.test.js` (every refusal listed
+above) and `detect.test.js` (Ollama detection: models, timeout, never throws). Network calls are injected, so the tests need no internet. Needs Node 18+.
 
 ## Limits
 

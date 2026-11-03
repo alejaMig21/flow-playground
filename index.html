@@ -193,6 +193,10 @@
     <span><strong>Imported flow.</strong> Check its HTTP URLs and Transform code before running it.</span>
     <button id="trustBtn">I reviewed it, allow Run</button>
   </div>
+  <div class="banner" id="ollamaHelp" hidden>
+    <span id="ollamaHelpText"></span>
+    <button id="ollamaRetry">Check again</button>
+  </div>
 
   <div id="scroller"><div id="board"><svg id="edges" aria-hidden="true"></svg><div id="empty" hidden><strong>Empty canvas</strong><span>Pick a template or add a node from the palette.</span></div></div></div>
   <p class="hint">Drag a node by its title. Click a connection to delete it. A node that fails turns red and everything after it is skipped. HTTP calls need an API that allows browser requests (CORS); Ollama is optional and must run on this machine.</p>
@@ -272,12 +276,39 @@
 
   let state, seq, pending, status, untrusted = false, lastOutputs = [];
 
+  // ---- Ollama: checked only when someone asks for an AI template or node (not on page load, so nobody gets a
+  // "local network access" browser prompt just for opening the page). If it is not there, say so up front
+  // instead of letting a flow run into an error.
+  let ollama = { available: false, models: [], smallest: null };
+  let lastTemplate = 'orders';
+  const AI_TEMPLATES = () => Object.keys(TEMPLATES).filter((k) => TEMPLATES[k].some(([t]) => t === 'ollama'));
+  function showOllamaHelp(show) {
+    $('ollamaHelp').hidden = !show;
+    if (!show) return;
+    const origin = location.protocol.startsWith('http') ? location.origin : '*';
+    $('ollamaHelpText').textContent = 'Ollama was not detected on this machine, so the AI nodes are not available here. They need Ollama running locally and allowing this page: start it with OLLAMA_ORIGINS=' + origin
+      + ' (a web page cannot change that setting). Everything else works without it.';
+  }
+  async function ensureOllama() {
+    setMsg('Checking for Ollama on this machine...');
+    ollama = await FlowEngine.detectOllama();
+    setMsg('');
+    showOllamaHelp(!ollama.available);
+    return ollama.available;
+  }
+  // New Ollama nodes start with a model that is really installed, so the first run works without editing anything.
+  function newParams(type, over) {
+    const p = { ...DEFAULTS[type](), ...over };
+    if (type === 'ollama' && ollama.available && ollama.smallest && !ollama.models.includes(p.model)) p.model = ollama.smallest;
+    return p;
+  }
+
   function setMsg(t, err) { msgEl.textContent = t || ''; msgEl.className = err ? 'err' : ''; }
   function setTrust(v) { untrusted = v; $('trust').hidden = !v; }
 
   function loadTemplate(name) {
     seq = 0; pending = null; status = {}; setTrust(false);
-    const nodes = TEMPLATES[name].map(([type, over], i) => ({ id: 'n' + ++seq, type, x: 24 + i * 230, y: 24, params: { ...DEFAULTS[type](), ...over } }));
+    const nodes = TEMPLATES[name].map(([type, over], i) => ({ id: 'n' + ++seq, type, x: 24 + i * 230, y: 24, params: newParams(type, over) }));
     state = { nodes, edges: nodes.slice(1).map((n, i) => ({ from: nodes[i].id, to: n.id })) };
     renderNodes();
     resetOutput();
@@ -393,6 +424,7 @@
     }
     if (node.type === 'ollama') {
       const dl = document.createElement('datalist'); dl.id = 'models-' + node.id;
+      dl.replaceChildren(...ollama.models.map((n) => new Option(n, n)));
       const note = noteEl('Optional: needs Ollama running on this machine.');
       const btn = document.createElement('button'); btn.textContent = 'Detect models';
       btn.addEventListener('click', async () => {
@@ -592,15 +624,25 @@
 
   document.querySelectorAll('[data-add]').forEach((b) => {
     b.prepend(icon(b.dataset.add, 15));
-    b.addEventListener('click', () => {
+    b.addEventListener('click', async () => {
       if (state.nodes.length >= LIMITS.nodes) { setMsg('A flow can have at most ' + LIMITS.nodes + ' nodes.', true); return; }
       setMsg('');
-      const type = b.dataset.add, n = state.nodes.length;
-      state.nodes.push({ id: 'n' + ++seq, type, x: 24 + (n % 6) * 30, y: 290 + (n % 4) * 30, params: DEFAULTS[type]() });
+      const type = b.dataset.add;
+      if (type === 'ollama' && !(await ensureOllama())) return;
+      const n = state.nodes.length;
+      state.nodes.push({ id: 'n' + ++seq, type, x: 24 + (n % 6) * 30, y: 290 + (n % 4) * 30, params: newParams(type) });
       renderNodes();
     });
   });
-  $('tpl').addEventListener('change', (e) => { loadTemplate(e.target.value); setMsg(''); });
+  $('tpl').addEventListener('change', async (e) => {
+    const v = e.target.value;
+    if (AI_TEMPLATES().includes(v) && !(await ensureOllama())) { e.target.value = lastTemplate; return; }   // stay where we were
+    if (!AI_TEMPLATES().includes(v)) showOllamaHelp(false);
+    lastTemplate = v; loadTemplate(v); setMsg('');
+  });
+  $('ollamaRetry').addEventListener('click', async () => {
+    if (await ensureOllama()) setMsg('Ollama detected (' + ollama.models.length + ' model(s)). Pick an AI template or add the Ollama node.');
+  });
   runBtn.addEventListener('click', run);
   $('trustBtn').addEventListener('click', () => { setTrust(false); setMsg('Flow allowed. Press Run when you are ready.'); });
   $('view').addEventListener('click', () => {
